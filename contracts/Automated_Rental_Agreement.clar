@@ -76,3 +76,75 @@
                 ERR_RENTAL_ENDED
                 ERR_RENTAL_ACTIVE)))
 )
+
+;; End rental agreement
+(define-public (end-rental (rental-id uint))
+    (let ((rental (unwrap! (map-get? Rentals rental-id) ERR_RENTAL_NOT_FOUND)))
+        (if (and
+                (or (is-eq tx-sender (get owner rental)) 
+                    (is-eq tx-sender (get renter rental)))
+                (is-eq (get status rental) "active")
+                (>= block-height (get end-date rental)))
+            (begin
+                (map-set Rentals rental-id
+                    (merge rental {status: "ended"}))
+                (ok true))
+            (if (is-eq (get status rental) "ended")
+                ERR_RENTAL_ENDED
+                ERR_RENTAL_ACTIVE)))
+)
+
+;; Cancel rental agreement
+(define-public (cancel-rental (rental-id uint))
+    (let ((rental (unwrap! (map-get? Rentals rental-id) ERR_RENTAL_NOT_FOUND)))
+        (if (and
+                (is-eq tx-sender (get owner rental))
+                (is-eq (get status rental) "active")
+                (< block-height (get end-date rental)))
+            (begin
+                (map-set Rentals rental-id
+                    (merge rental {status: "cancelled"}))
+                (ok true))
+            (if (is-eq (get status rental) "ended")
+                ERR_RENTAL_ENDED
+                ERR_RENTAL_ACTIVE)))
+)
+
+;; Return deposit
+(define-public (return-deposit (rental-id uint))
+    (let ((rental (unwrap! (map-get? Rentals rental-id) ERR_RENTAL_NOT_FOUND)))
+        (if (and
+                (is-eq tx-sender (get owner rental))
+                (is-eq (get status rental) "ended")
+                (not (get deposit-returned rental)))
+            (begin
+                (try! (as-contract (stx-transfer? 
+                                    (get deposit-amount rental) 
+                                    tx-sender 
+                                    (get renter rental))))
+                (map-set Rentals rental-id
+                    (merge rental {deposit-returned: true}))
+                (ok true))
+            (if (get deposit-returned rental)
+                ERR_DEPOSIT_ALREADY_RETURNED
+                ERR_RENTAL_ACTIVE)))
+)
+
+;; Owner functions
+
+;; Change owner
+(define-public (change-owner (new-owner principal))
+    (if (is-eq tx-sender (var-get owner))
+        (begin
+            (var-set owner new-owner)
+            (ok true))
+        ERR_NOT_OWNER)
+)
+
+;; View functions
+
+;; Get rental details
+(define-read-only (get-rental (rental-id uint))
+    (map-get? Rentals rental-id)
+)
+
