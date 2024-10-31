@@ -10,10 +10,22 @@
 (define-constant ERR_DEPOSIT_ALREADY_RETURNED (err u106))
 (define-constant ERR_INVALID_DURATION (err u107))
 (define-constant ERR_NOT_AUTHORIZED (err u108))
+;; Additional Constants
+(define-constant ERR_INVALID_INSURANCE (err u113))
+(define-constant ERR_INSURANCE_NOT_FOUND (err u114))
+(define-constant ERR_SUBLEASE_NOT_ALLOWED (err u115))
+(define-constant ERR_UTILITY_NOT_FOUND (err u116))
+(define-constant ERR_INSPECTION_NOT_FOUND (err u117))
+(define-constant ERR_PAYMENT_PLAN_EXISTS (err u118))
 
 ;; Data Variables
 (define-data-var owner principal tx-sender)
 (define-data-var rental-count uint u0)
+;; Additional Data Variables
+(define-data-var insurance-count uint u0)
+(define-data-var utility-count uint u0)
+(define-data-var inspection-count uint u0)
+
 
 ;; Data Maps
 (define-map Rentals
@@ -27,6 +39,71 @@
         deposit-amount: uint,
         deposit-returned: bool,
         status: (string-ascii 20)  ;; active, ended, cancelled
+    }
+)
+;; Additional Data Maps
+(define-map InsurancePolicies
+    uint  ;; insurance ID
+    {
+        rental-id: uint,
+        policy-number: (string-ascii 50),
+        coverage-amount: uint,
+        start-date: uint,
+        end-date: uint,
+        insurance-provider: (string-ascii 100),
+        status: (string-ascii 20)  ;; active, expired, cancelled
+    }
+)
+
+(define-map UtilityAccounts
+    uint  ;; utility ID
+    {
+        rental-id: uint,
+        utility-type: (string-ascii 20),  ;; water, electricity, gas, internet
+        account-number: (string-ascii 50),
+        provider: (string-ascii 100),
+        monthly-average: uint,
+        last-reading: uint,
+        last-payment: uint
+    }
+)
+
+(define-map PropertyInspections
+    uint  ;; inspection ID
+    {
+        rental-id: uint,
+        inspector: principal,
+        inspection-date: uint,
+        inspection-type: (string-ascii 50),  ;; move-in, move-out, routine, maintenance
+        report: (string-ascii 1000),
+        issues-found: bool,
+        follow-up-required: bool,
+        resolved-date: uint
+    }
+)
+
+(define-map SubleaseAgreements
+    uint  ;; rental ID
+    {
+        original-renter: principal,
+        sublease-renter: principal,
+        start-date: uint,
+        end-date: uint,
+        monthly-rate: uint,
+        status: (string-ascii 20),  ;; pending, active, ended
+        approved-by-owner: bool
+    }
+)
+
+(define-map PaymentPlans
+    uint  ;; rental ID
+    {
+        installments: uint,
+        amount-per-installment: uint,
+        payment-schedule: (list 12 uint),  ;; block heights for payments
+        remaining-balance: uint,
+        last-installment-paid: uint,
+        status: (string-ascii 20)  ;; active, completed, defaulted
     }
 )
 
@@ -146,5 +223,33 @@
 ;; Get rental details
 (define-read-only (get-rental (rental-id uint))
     (map-get? Rentals rental-id)
+)
+;; Additional Public Functions
+
+;; Add insurance policy
+(define-public (add-insurance-policy
+    (rental-id uint)
+    (policy-number (string-ascii 50))
+    (coverage-amount uint)
+    (start-date uint)
+    (end-date uint)
+    (insurance-provider (string-ascii 100)))
+    (let ((insurance-id (+ (var-get insurance-count) u1))
+          (rental (unwrap! (map-get? Rentals rental-id) ERR_RENTAL_NOT_FOUND)))
+        (if (is-eq tx-sender (get renter rental))
+            (begin
+                (map-set InsurancePolicies insurance-id
+                    {
+                        rental-id: rental-id,
+                        policy-number: policy-number,
+                        coverage-amount: coverage-amount,
+                        start-date: start-date,
+                        end-date: end-date,
+                        insurance-provider: insurance-provider,
+                        status: "active"
+                    })
+                (var-set insurance-count insurance-id)
+                (ok insurance-id))
+            ERR_NOT_AUTHORIZED))
 )
 
