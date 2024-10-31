@@ -252,4 +252,28 @@
                 (ok insurance-id))
             ERR_NOT_AUTHORIZED))
 )
+;; Register utility account
+(define-public (register-utility
+    (rental-id uint)
+    (utility-type (string-ascii 20))
+    (account-number (string-ascii 50))
+    (provider (string-ascii 100)))
+    (let ((utility-id (+ (var-get utility-count) u1))
+          (rental (unwrap! (map-get? Rentals rental-id) ERR_RENTAL_NOT_FOUND)))
+        (if (is-eq tx-sender (get renter rental))
+            (begin
+                (map-set UtilityAccounts utility-id
+                    {
+                        rental-id: rental-id,
+                        utility-type: utility-type,
+                        account-number: account-number,
+                        provider: provider,
+                        monthly-average: u0,
+                        last-reading: u0,
+                        last-payment: u0
+                    })
+                (var-set utility-count utility-id)
+                (ok utility-id))
+            ERR_NOT_AUTHORIZED))
+)
 
